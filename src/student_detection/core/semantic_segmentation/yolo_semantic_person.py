@@ -46,17 +46,19 @@ class YOLOSemanticPerson(SemanticSegmentationModel):
         ) # type: ignore
 
         r = results[0]
-        h, w = image.shape[:2]
 
         # Extract 2D class-ID mask
-        if hasattr(r, "semantic_mask") and r.semantic_mask is not None:
-            mask_data = r.semantic_mask.data
-            if isinstance(mask_data, torch.Tensor):
-                mask_data = mask_data.cpu().numpy()
-            class_mask = mask_data.astype(np.int32)
-        else:
-            # Fallback if no mask is produced: treat entire image as background (255)
-            class_mask = np.full((h, w), fill_value=255, dtype=np.int32)
+        if not hasattr(r, "semantic_mask") or r.semantic_mask is None:
+            raise ValueError(
+                "Model did not produce a semantic_mask. "
+                "Ensure you pass a semantic segmentation model checkpoint (e.g., '*-sem.pt') "
+                "rather than an instance segmentation ('*-seg.pt') or object detection model."
+            )
+
+        mask_data = r.semantic_mask.data
+        if isinstance(mask_data, torch.Tensor):
+            mask_data = mask_data.cpu().numpy()
+        class_mask = mask_data.astype(np.int32)
 
         return SegmentationResult(
             mask=class_mask,

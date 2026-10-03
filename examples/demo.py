@@ -19,18 +19,20 @@ def main() -> None:
     numpy_image = NumpyImage(np.array(image))
 
     pipeline = DetectorPipeline(
-        sem_model=YOLOSemanticPerson("data/models/yolo26m-seg.pt", "cuda"),
+        sem_model=YOLOSemanticPerson("data/models/yolo26x-sem.pt", "cuda"),
         obj_model=YOLOPerson("data/models/yolo26m.pt", "cpu"),
         dep_model=DepthAnythingV2(device="cuda"),
     )
+
     result = pipeline.predict(
         image=numpy_image,
-        conf_policy=FixedConfidencePolicy(0.05),
+        conf_policy=FixedConfidencePolicy(0.25),
         iou_policy=FixedIoUThresholdPolicy(0.25),
         ioa_policy=FixedIoAThresholdPolicy(0.35),
         depth_policy=FixedDepthThresholdPolicy(0.010),
     )
-    print(f"Detected {result.people_count} students.")
+    print(f"Total students counted: {result.people_count}")
+    print(f"Total detections evaluated: {len(result.detections)}")
 
 
 if __name__ == "__main__":
