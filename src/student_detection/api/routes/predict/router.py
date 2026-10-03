@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from student_detection.common import NumpyImage
 
 from ...dependencies import get_detector_pipeline_worker
-from ...detector_pipeline import DetectorPipelineWorker, Item
+from ...worker import DetectorPipelineWorker, Item
 from .schemas import DetectionItem, PredictResponse
 
 router = APIRouter(prefix="/predict")

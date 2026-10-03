@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Self
 
 from student_detection.common import NumpyImage
-from student_detection.pipeline import PipelineResult
+from student_detection.core import PipelineResult
 
 
 @dataclass
@@ -87,7 +87,7 @@ class DetectorPipelineWorker:
 
     Examples:
         >>> def fake_predict(img):
-        ...     from student_detection.pipeline import PipelineResult
+        ...     from student_detection.core import PipelineResult
         ...     import numpy as np
         ...     return PipelineResult([], 0, np.zeros((1, 1)), np.zeros((1, 1)))
         >>> worker = DetectorPipelineWorker(predict_fn=fake_predict)

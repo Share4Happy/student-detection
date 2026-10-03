@@ -14,7 +14,7 @@ class DepthThresholdPolicy(PairwiseDetectionPolicy):
         `__call__(person_a, person_b)`: Compute the depth threshold between two detections.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> class CustomDepth(DepthThresholdPolicy):
         ...     def __call__(self, person_a: PipelineDetection, person_b: PipelineDetection) -> float:
         ...         return 0.01
@@ -34,7 +34,7 @@ class FixedDepthThresholdPolicy(DepthThresholdPolicy):
         `__call__(person_a, person_b)`: Return the constant depth difference threshold.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> policy = FixedDepthThresholdPolicy(threshold=0.01)
         >>> det_a = PipelineDetection(0, [0, 0, 10, 10], 0.9, 0.5, 0.01)
         >>> det_b = PipelineDetection(1, [5, 5, 15, 15], 0.8, 0.52, 0.01)
@@ -89,7 +89,7 @@ class DistanceDecayDepthPolicy(DepthThresholdPolicy):
         `__call__(person_a, person_b)`: Return the distance-decayed depth threshold.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> policy = DistanceDecayDepthPolicy(base_threshold=0.02, min_threshold=0.005, decay_factor=0.5)
         >>> det_a = PipelineDetection(0, [0, 0, 10, 10], 0.9, 0.6, 0.01)
         >>> det_b = PipelineDetection(1, [5, 5, 15, 15], 0.8, 0.6, 0.01)

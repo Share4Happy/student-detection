@@ -14,7 +14,7 @@ class IoUThresholdPolicy(PairwiseDetectionPolicy):
         `__call__(person_a, person_b)`: Compute the IoU threshold between two detections.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> class CustomIoU(IoUThresholdPolicy):
         ...     def __call__(self, person_a: PipelineDetection, person_b: PipelineDetection) -> float:
         ...         return 0.3
@@ -34,7 +34,7 @@ class FixedIoUThresholdPolicy(IoUThresholdPolicy):
         `__call__(person_a, person_b)`: Return the constant IoU threshold.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> policy = FixedIoUThresholdPolicy(threshold=0.25)
         >>> det_a = PipelineDetection(0, [0, 0, 10, 10], 0.9, 0.5, 0.01)
         >>> det_b = PipelineDetection(1, [5, 5, 15, 15], 0.8, 0.5, 0.01)
@@ -88,7 +88,7 @@ class DistanceScaledIoUPolicy(IoUThresholdPolicy):
         `__call__(person_a, person_b)`: Return the distance-boosted IoU threshold.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> policy = DistanceScaledIoUPolicy(base_threshold=0.2, distance_boost=0.1)
         >>> det_a = PipelineDetection(0, [0, 0, 10, 10], 0.9, 0.5, 0.01)
         >>> det_b = PipelineDetection(1, [5, 5, 15, 15], 0.8, 0.5, 0.01)

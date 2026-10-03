@@ -1,6 +1,6 @@
 from fastapi import Request
 
-from .detector_pipeline import DetectorPipelineWorker
+from .worker import DetectorPipelineWorker
 
 
 def get_detector_pipeline_worker(

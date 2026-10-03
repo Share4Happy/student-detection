@@ -34,26 +34,26 @@ from PIL import Image, ImageTk
 
 # Resolve workspace root and configure paths
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent if (SCRIPT_DIR.parent / "src").exists() else SCRIPT_DIR
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 for p in [str(PROJECT_ROOT), str(SCRIPT_DIR)]:
     if p not in sys.path:
         sys.path.insert(0, p)
 
 from student_detection.common import NumpyImage
-from student_detection.pipeline import (
+from student_detection.core import (
     DetectorPipeline,
     PipelineDetection,
     PipelineResult,
 )
-from student_detection.pipeline.depth_estimation import DepthAnythingV2
-from student_detection.pipeline.object_detection import YOLOPerson
-from student_detection.pipeline.policy import (
+from student_detection.core.depth_estimation import DepthAnythingV2
+from student_detection.core.object_detection import YOLOPerson
+from student_detection.core.policy import (
     FixedConfidencePolicy,
     FixedDepthThresholdPolicy,
     FixedIoAThresholdPolicy,
     FixedIoUThresholdPolicy,
 )
-from student_detection.pipeline.semantic_segmentation import YOLOSemanticPerson
+from student_detection.core.semantic_segmentation import YOLOSemanticPerson
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
 logger = logging.getLogger("PipelineComparisonGUI")

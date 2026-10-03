@@ -14,7 +14,7 @@ class ConfidencePolicy(SingleDetectionPolicy):
         `__call__(person)`: Compute the required confidence cutoff for a detection.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> class CustomConf(ConfidencePolicy):
         ...     def __call__(self, person: PipelineDetection) -> float:
         ...         return 0.4
@@ -34,7 +34,7 @@ class FixedConfidencePolicy(ConfidencePolicy):
         `__call__(person)`: Return the constant confidence threshold.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> policy = FixedConfidencePolicy(threshold=0.3)
         >>> det = PipelineDetection(0, [0, 0, 10, 10], 0.8, 0.5, 0.01)
         >>> policy(det)
@@ -84,7 +84,7 @@ class DistanceScaledConfidencePolicy(ConfidencePolicy):
         `__call__(person)`: Return the distance-adapted confidence threshold.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> policy = DistanceScaledConfidencePolicy(near_threshold=0.3, far_threshold=0.15, depth_cutoff=0.5)
         >>> near_det = PipelineDetection(0, [0, 0, 10, 10], 0.8, 0.2, 0.01)
         >>> far_det = PipelineDetection(1, [0, 0, 10, 10], 0.8, 0.7, 0.01)

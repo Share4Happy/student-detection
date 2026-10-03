@@ -43,5 +43,5 @@ build-backend = "uv_build"
 module-root = "src"
 
 [project.scripts]
-gui = "student_detection.apps.gui.pipeline_comparison:main"
-api = "student_detection.apps.api.main:main"
+gui = "student_detection.gui.pipeline_comparison:main"
+api = "student_detection.api.main:main"

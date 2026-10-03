@@ -14,7 +14,7 @@ class IoAThresholdPolicy(PairwiseDetectionPolicy):
         `__call__(person_a, person_b)`: Compute the IoA threshold between two detections.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> class CustomIoA(IoAThresholdPolicy):
         ...     def __call__(self, person_a: PipelineDetection, person_b: PipelineDetection) -> float:
         ...         return 0.35
@@ -34,7 +34,7 @@ class FixedIoAThresholdPolicy(IoAThresholdPolicy):
         `__call__(person_a, person_b)`: Return the constant IoA threshold.
 
     Examples:
-        >>> from student_detection.pipeline.models import PipelineDetection
+        >>> from student_detection.core.models import PipelineDetection
         >>> policy = FixedIoAThresholdPolicy(threshold=0.35)
         >>> det_a = PipelineDetection(0, [0, 0, 10, 10], 0.9, 0.5, 0.01)
         >>> det_b = PipelineDetection(1, [2, 2, 8, 8], 0.8, 0.5, 0.01)

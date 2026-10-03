@@ -10,24 +10,24 @@ import torch
 import uvicorn
 from fastapi import APIRouter, FastAPI
 
-from student_detection.pipeline import DetectorPipeline
-from student_detection.pipeline.depth_estimation import DepthAnythingV2
-from student_detection.pipeline.object_detection import YOLOPerson
-from student_detection.pipeline.policy import (
+from student_detection.core import DetectorPipeline
+from student_detection.core.depth_estimation import DepthAnythingV2
+from student_detection.core.object_detection import YOLOPerson
+from student_detection.core.policy import (
     FixedConfidencePolicy,
     FixedDepthThresholdPolicy,
     FixedIoAThresholdPolicy,
     FixedIoUThresholdPolicy,
 )
-from student_detection.pipeline.semantic_segmentation import YOLOSemanticPerson
+from student_detection.core.semantic_segmentation import YOLOSemanticPerson
 
-from .detector_pipeline import DetectorPipelineWorker
 from .routes import predict
+from .worker import DetectorPipelineWorker
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
 logger = logging.getLogger("StudentDetectionAPI")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def find_default_model(model_name: str) -> str:
