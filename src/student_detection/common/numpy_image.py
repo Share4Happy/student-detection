@@ -2,11 +2,27 @@ from __future__ import annotations
 
 from typing import Self
 
+import cv2
 import numpy as np
 
 
 class NumpyImage(np.ndarray):
     """A validated np.ndarray subtype representing an image."""
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> Self:
+        if not data:
+            raise ValueError("Input byte buffer is empty.")
+
+        np_buf = np.frombuffer(data, dtype=np.uint8)
+        bgr_img = cv2.imdecode(np_buf, cv2.IMREAD_COLOR)
+
+        if bgr_img is None:
+            raise ValueError("Invalid image file or unsupported format.")
+
+        rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
+
+        return cls(rgb_img)
 
     def __new__(cls, input_array: np.ndarray) -> Self:
         arr = np.asanyarray(input_array)

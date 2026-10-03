@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from ...common import NumpyImage
+from student_detection.common import NumpyImage
 
 
 @dataclass

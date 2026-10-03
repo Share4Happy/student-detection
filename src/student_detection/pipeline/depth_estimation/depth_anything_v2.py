@@ -7,8 +7,9 @@ import torch.nn.functional as F
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
-from ....common import NumpyImage
-from ..base import DepthEstimationModel, DepthResult
+from student_detection.common import NumpyImage
+
+from . import DepthEstimationModel, DepthResult
 
 
 class DepthAnythingV2(DepthEstimationModel):

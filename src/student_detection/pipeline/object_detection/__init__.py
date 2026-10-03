@@ -1,5 +1,5 @@
 from .base import BoundingBox, ObjectDetectionModel
-from .implementations import YOLOPerson
+from .yolo_person import YOLOPerson
 
 __all__ = [
     "BoundingBox",

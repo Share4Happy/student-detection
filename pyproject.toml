@@ -5,14 +5,22 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.141.1",
     "matplotlib>=3.11.2",
     "openai>=3.19.0",
+    "opencv-python>=5.0.0.93",
     "pillow>=12.3.0",
+    "pydantic>=2.13.5",
+    "python-multipart>=0.0.32",
     "torch>=2.14.0",
     "torchvision>=0.29.0",
     "transformers>=5.17.0",
     "ultralytics>=8.4.160",
+    "uvicorn>=0.54.0",
 ]
+
+[tool.ruff.lint]
+ignore = ["BLE001"]
 
 [[tool.uv.index]]
 name = "pytorch-cu130"
@@ -26,3 +34,14 @@ torch = [
 torchvision = [
   { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+
+[project.scripts]
+gui = "student_detection.apps.gui.pipeline_comparison:main"
+api = "student_detection.apps.api.main:main"

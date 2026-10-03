@@ -1,5 +1,5 @@
 from .base import SegmentationResult, SemanticSegmentationModel
-from .implementations import YOLOSemanticPerson
+from .yolo_semantic_person import YOLOSemanticPerson
 
 __all__ = [
     "SegmentationResult",

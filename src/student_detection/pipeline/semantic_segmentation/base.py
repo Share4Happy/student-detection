@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ...common import NumpyImage
+from student_detection.common import NumpyImage
 
 
 @dataclass

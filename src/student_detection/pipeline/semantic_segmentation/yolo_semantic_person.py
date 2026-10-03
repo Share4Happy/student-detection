@@ -6,8 +6,9 @@ import torch
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
-from ....common import NumpyImage
-from ..base import SegmentationResult, SemanticSegmentationModel
+from student_detection.common import NumpyImage
+
+from . import SegmentationResult, SemanticSegmentationModel
 
 
 class YOLOSemanticPerson(SemanticSegmentationModel):
@@ -15,9 +16,16 @@ class YOLOSemanticPerson(SemanticSegmentationModel):
     def __init__(
         self,
         model: str | Path = "yolo26n-sem.pt",
-        device: Literal["cpu", "cuda"] = "cpu"
+        device: Literal["cpu", "cuda"] = "cpu",
+        person_class_id: int | None = None,
     ):
         self.model = YOLO(model).to(device)
+        if person_class_id is not None:
+            self.person_class_id = person_class_id
+        else:
+            # Auto-detect class ID named 'person' (e.g. 11 for cityscapes semantic models, 0 for COCO)
+            person_ids = [k for k, v in getattr(self.model, "names", {}).items() if str(v).lower() == "person"]
+            self.person_class_id = person_ids[0] if person_ids else 11
 
     def predict(
         self,
@@ -68,7 +76,7 @@ class YOLOSemanticPerson(SemanticSegmentationModel):
         result = self.predict(image, **kwargs)
 
         # 2. Extract boolean mask for target classes
-        roi_mask = result.get_binary_mask([0]) # Id for person class is 11
+        roi_mask = result.get_binary_mask([self.person_class_id])
 
         # 3. Create masked image (default: black fill for non-ROI)
         masked_image = image.copy()

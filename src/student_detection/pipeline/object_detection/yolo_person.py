@@ -5,8 +5,9 @@ from torch import Tensor
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
-from ....common import NumpyImage
-from .. import BoundingBox, ObjectDetectionModel
+from student_detection.common import NumpyImage
+
+from . import BoundingBox, ObjectDetectionModel
 
 
 class YOLOPerson(ObjectDetectionModel):

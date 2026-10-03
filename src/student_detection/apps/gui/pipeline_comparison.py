@@ -17,9 +17,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import queue
+import sys
 import threading
 import tkinter as tk
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -28,38 +30,50 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from PIL import Image, ImageTk
-from transformers import AutoImageProcessor, AutoModelForDepthEstimation
-from ultralytics import YOLO
+
+# Resolve workspace root and configure paths
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent if (SCRIPT_DIR.parent / "src").exists() else SCRIPT_DIR
+for p in [str(PROJECT_ROOT), str(SCRIPT_DIR)]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+from student_detection.common import NumpyImage
+from student_detection.pipeline import (
+    DetectorPipeline,
+    PipelineDetection,
+    PipelineResult,
+)
+from student_detection.pipeline.depth_estimation import DepthAnythingV2
+from student_detection.pipeline.object_detection import YOLOPerson
+from student_detection.pipeline.semantic_segmentation import YOLOSemanticPerson
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
 logger = logging.getLogger("PipelineComparisonGUI")
 
-# Resolve workspace root
-SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent if (SCRIPT_DIR.parent / "models").exists() else SCRIPT_DIR
 
-
-@dataclass
-class DetectionRecord:
-    box_id: int
-    raw_bbox: list[int]
-    refined_bbox: list[int]
-    confidence: float
-    depth: float
-    depth_std: float
-    kept: bool = True
-    suppressed_by: int | None = None
-    suppression_reason: str | None = None
+def find_default_model(model_name: str) -> str:
+    """Helper to locate model weights in data/models/ or models/."""
+    candidates = [
+        PROJECT_ROOT / "data" / "models" / model_name,
+        PROJECT_ROOT / "models" / model_name,
+        Path("data/models") / model_name,
+        Path("models") / model_name,
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return str(PROJECT_ROOT / "data" / "models" / model_name)
 
 
 class PipelineEngine:
-    """Manages model loading, caching, and inference."""
+    """Manages model loading, caching, and inference using DetectorPipeline."""
 
     def __init__(
         self,
-        sem_model_path: str = str(PROJECT_ROOT / "models" / "yolo26x-sem.pt"),
-        det_model_path: str = str(PROJECT_ROOT / "models" / "yolo26x.pt"),
-        depth_checkpoint: str = "depth-anything/Depth-Anything-V2-Large-hf",
+        sem_model_path: str = find_default_model("yolo26x-sem.pt"),
+        det_model_path: str = find_default_model("yolo26x.pt"),
+        depth_checkpoint: str = "depth-anything/Depth-Anything-V2-Small-hf",
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.sem_model_path = sem_model_path
@@ -77,11 +91,8 @@ class PipelineEngine:
             torch.cuda.synchronize()
             logger.info("CUDA context ready.")
 
-        # Models (lazily initialized on first use)
-        self.sem_model: YOLO | None = None
-        self.det_model: YOLO | None = None
-        self.depth_processor = None
-        self.depth_model = None
+        # DetectorPipeline instance
+        self.pipeline: DetectorPipeline | None = None
 
         # Pending colormap for depth visualization (applied in main thread)
         self._pending_colormap: str = "viridis"
@@ -95,23 +106,23 @@ class PipelineEngine:
         self.raw_confs: np.ndarray | None = None
         self.depth_norm: np.ndarray | None = None
         self.depth_colored_bgr: np.ndarray | None = None
+        self.pipeline_result: PipelineResult | None = None
 
-    def ensure_sem_model(self):
-        if self.sem_model is None:
+    def ensure_pipeline(self):
+        if self.pipeline is None:
             logger.info(f"Loading semantic model: {self.sem_model_path}")
-            self.sem_model = YOLO(self.sem_model_path)
-
-    def ensure_det_model(self):
-        if self.det_model is None:
+            sem_model = YOLOSemanticPerson(model=self.sem_model_path, device=self.device)
             logger.info(f"Loading detection model: {self.det_model_path}")
-            self.det_model = YOLO(self.det_model_path)
-
-    def ensure_depth_model(self):
-        if self.depth_model is None:
+            det_model = YOLOPerson(model=self.det_model_path, device=self.device)
             logger.info(f"Loading Depth Anything V2: {self.depth_checkpoint}")
-            self.depth_processor = AutoImageProcessor.from_pretrained(self.depth_checkpoint)
-            self.depth_model = AutoModelForDepthEstimation.from_pretrained(self.depth_checkpoint).to(self.device)
-            self.depth_model.eval()
+            dep_model = DepthAnythingV2(model_path=self.depth_checkpoint, device=self.device)
+
+            logger.info("Initializing DetectorPipeline...")
+            self.pipeline = DetectorPipeline(
+                sem_model=sem_model,
+                obj_model=det_model,
+                dep_model=dep_model,
+            )
 
     def load_image(self, image_path: str) -> bool:
         if not os.path.exists(image_path):
@@ -128,6 +139,7 @@ class PipelineEngine:
         self.raw_confs = None
         self.depth_norm = None
         self.depth_colored_bgr = None
+        self.pipeline_result = None
         return True
 
     def run_inference(
@@ -136,77 +148,107 @@ class PipelineEngine:
         use_depth: bool,
         non_roi_fill: str = "black",
         colormap: str = "viridis",
+        conf_thresh: float = 0.25,
+        iou_thresh: float = 0.25,
+        ioa_thresh: float = 0.35,
+        depth_thresh: float = 0.010,
+        refine_boxes: bool = True,
         imgsz: int = 1280,
-    ):
-        """Runs the neural network stages and populates caches."""
+    ) -> PipelineResult | None:
+        """Runs inference via DetectorPipeline and populates caches."""
         if self.orig_bgr is None:
             raise ValueError("No image loaded.")
 
         h, w = self.orig_bgr.shape[:2]
+        self.ensure_pipeline()
+        assert self.pipeline is not None
 
-        # 1. Semantic ROI
-        if use_sem_roi:
-            self.ensure_sem_model()
-            sem_res = self.sem_model(self.orig_bgr, classes=[11], imgsz=imgsz, verbose=False)[0]
-            if sem_res.semantic_mask is not None:
-                mask_data = sem_res.semantic_mask.data
-                if isinstance(mask_data, torch.Tensor):
-                    mask_data = mask_data.cpu().numpy()
-                self.sem_mask = mask_data == 11
-            else:
-                self.sem_mask = np.ones((h, w), dtype=bool)
+        input_img = NumpyImage(self.orig_bgr)
+        fill_val = 0 if non_roi_fill == "black" else (255 if non_roi_fill == "white" else 0)
+
+        # Standard end-to-end pipeline execution
+        if use_sem_roi and use_depth and non_roi_fill in ("black", "white"):
+            self.pipeline_result = self.pipeline.predict(
+                image=input_img,
+                conf_threshold=conf_thresh,
+                iou_thresh=iou_thresh,
+                ioa_thresh=ioa_thresh,
+                depth_thresh=depth_thresh,
+                refine_boxes=refine_boxes,
+                non_roi_fill=fill_val,
+                imgsz=imgsz,
+            )
+            self.sem_mask = self.pipeline_result.sem_mask
+            self.depth_norm = self.pipeline_result.depth_map
 
             masked = self.orig_bgr.copy()
-            if non_roi_fill == "black":
-                masked[~self.sem_mask] = 0
-            elif non_roi_fill == "white":
-                masked[~self.sem_mask] = 255
-            elif non_roi_fill == "blur":
+            masked[~self.sem_mask] = fill_val
+            self.masked_bgr = masked
+
+            # Cache raw candidate detections for real-time slider re-filtering
+            candidate_boxes = self.pipeline.obj_model.predict(
+                NumpyImage(self.masked_bgr),
+                conf_threshold=0.05,
+                imgsz=imgsz,
+            )
+            if candidate_boxes:
+                self.raw_boxes = np.array([b.xyxy for b in candidate_boxes], dtype=int)
+                self.raw_confs = np.array([b.confidence for b in candidate_boxes], dtype=float)
+            else:
+                self.raw_boxes = np.empty((0, 4), dtype=int)
+                self.raw_confs = np.empty((0,), dtype=float)
+
+            self._pending_colormap = colormap
+            self.depth_colored_bgr = None
+            return self.pipeline_result
+
+        # Ablation configurations (e.g. ROI disabled, Depth disabled, or custom fill)
+        # 1. Semantic ROI
+        if use_sem_roi:
+            sem_mask, masked = self.pipeline.sem_model.extract_roi(
+                input_img,
+                fill_value=fill_val,
+                imgsz=imgsz,
+            )
+            if non_roi_fill == "blur":
                 blurred = cv2.GaussianBlur(self.orig_bgr, (51, 51), 0)
-                masked[~self.sem_mask] = blurred[~self.sem_mask]
+                masked = self.orig_bgr.copy()
+                masked[~sem_mask] = blurred[~sem_mask]
+            elif non_roi_fill == "none":
+                masked = self.orig_bgr.copy()
+
+            self.sem_mask = sem_mask
             self.masked_bgr = masked
         else:
             self.sem_mask = np.ones((h, w), dtype=bool)
             self.masked_bgr = self.orig_bgr.copy()
 
         # 2. Object Detection
-        self.ensure_det_model()
-        input_for_det = self.masked_bgr if use_sem_roi else self.orig_bgr
-        det_res = self.det_model(input_for_det, classes=[0], imgsz=imgsz, conf=0.05, verbose=False)[0]
-        if det_res.boxes is not None and len(det_res.boxes) > 0:
-            self.raw_boxes = det_res.boxes.xyxy.cpu().numpy().astype(int)
-            self.raw_confs = det_res.boxes.conf.cpu().numpy()
+        input_for_det = NumpyImage(self.masked_bgr if use_sem_roi else self.orig_bgr)
+        detected_boxes = self.pipeline.obj_model.predict(
+            input_for_det,
+            conf_threshold=0.05,
+            imgsz=imgsz,
+        )
+        if detected_boxes:
+            self.raw_boxes = np.array([b.xyxy for b in detected_boxes], dtype=int)
+            self.raw_confs = np.array([b.confidence for b in detected_boxes], dtype=float)
         else:
             self.raw_boxes = np.empty((0, 4), dtype=int)
             self.raw_confs = np.empty((0,), dtype=float)
 
         # 3. Depth Estimation
         if use_depth:
-            self.ensure_depth_model()
-            pil_image = Image.fromarray(cv2.cvtColor(self.orig_bgr, cv2.COLOR_BGR2RGB))
-            inputs = self.depth_processor(images=pil_image, return_tensors="pt").to(self.device)
-            with torch.no_grad():
-                pred_depth = self.depth_model(**inputs).predicted_depth
-            pred_depth = torch.nn.functional.interpolate(
-                pred_depth.unsqueeze(1),
-                size=pil_image.size[::-1],
-                mode="bicubic",
-                align_corners=False,
-            ).squeeze().cpu().numpy()
-
-            d_min, d_max = float(pred_depth.min()), float(pred_depth.max())
-            if d_max > d_min:
-                self.depth_norm = (pred_depth - d_min) / (d_max - d_min)
-            else:
-                self.depth_norm = np.zeros_like(pred_depth)
-
-            # Matplotlib is not thread-safe: store colormap name and apply it
-            # in the main thread via apply_depth_colormap().
+            depth_res = self.pipeline.dep_model.predict(input_img)
+            self.depth_norm = depth_res.get_normalized()
             self._pending_colormap = colormap
-            self.depth_colored_bgr = None  # Will be populated in main thread
+            self.depth_colored_bgr = None
         else:
             self.depth_norm = np.zeros((h, w), dtype=np.float32)
             self.depth_colored_bgr = np.zeros((h, w, 3), dtype=np.uint8)
+
+        self.pipeline_result = None
+        return None
 
     def apply_depth_colormap(self):
         """Apply depth colormap using matplotlib (call from main thread only)."""
@@ -224,7 +266,7 @@ class PipelineEngine:
         depth_thresh: float,
         use_depth: bool,
         refine_boxes: bool,
-    ) -> list[DetectionRecord]:
+    ) -> list[PipelineDetection]:
         """Fast post-processing step to filter detections and apply Depth-NMS."""
         if self.raw_boxes is None or len(self.raw_boxes) == 0:
             return []
@@ -239,7 +281,7 @@ class PipelineEngine:
         boxes = self.raw_boxes[valid_idx]
         confs = self.raw_confs[valid_idx]
 
-        records: list[DetectionRecord] = []
+        records: list[PipelineDetection] = []
         for i in range(len(boxes)):
             x1, y1, x2, y2 = boxes[i]
             x1, y1 = max(0, x1), max(0, y1)
@@ -264,10 +306,9 @@ class PipelineEngine:
             std_depth = float(np.std(person_depth)) if len(person_depth) > 0 else 0.0
 
             records.append(
-                DetectionRecord(
+                PipelineDetection(
                     box_id=i,
-                    raw_bbox=[int(x1), int(y1), int(x2), int(y2)],
-                    refined_bbox=[rx1, ry1, rx2, ry2],
+                    bbox=[rx1, ry1, rx2, ry2],
                     confidence=float(confs[i]),
                     depth=med_depth,
                     depth_std=std_depth,
@@ -287,8 +328,8 @@ class PipelineEngine:
 
             for other_i in remaining:
                 other = records[other_i]
-                b1 = curr.refined_bbox
-                b2 = other.refined_bbox
+                b1 = curr.bbox
+                b2 = other.bbox
 
                 x1 = max(b1[0], b2[0])
                 y1 = max(b1[1], b2[1])
@@ -351,16 +392,12 @@ class PipelineComparisonGUI:
             pass
 
         self.engine = PipelineEngine()
-        self.detections: list[DetectionRecord] = []
+        self.detections: list[PipelineDetection] = []
         self.current_display_img: np.ndarray | None = None
         self.photo_img: ImageTk.PhotoImage | None = None
 
         # Thread-safe message queue: background thread puts a message here,
         # the main thread polls via root.after and picks it up.
-        # NOTE: root.after() called FROM a background thread is silently
-        # dropped in Tk 9.0 on Linux. Polling a queue from the main thread
-        # is the only reliable cross-thread callback pattern.
-        import queue
         self._msg_queue: queue.Queue[str] = queue.Queue()
         self._start_queue_poll()
 
@@ -577,15 +614,12 @@ class PipelineComparisonGUI:
             scale = ttk.Scale(sec, from_=from_, to=to_, variable=var, command=_sync)
             scale.pack(fill=tk.X, pady=(2, 6))
 
-            # Arrow key stepping: focus the scale widget then use Left/Right/Up/Down.
-            # ttk.Scale passes arrow events to Tk's built-in handler which moves by 1
-            # unit (not by our resolution), so we intercept and handle it ourselves.
             def _on_key(event, direction):
                 cur = round(var.get() / resolution) * resolution
                 new = max(from_, min(to_, cur + direction * resolution))
                 new = round(new / resolution) * resolution
                 _sync(new)
-                return "break"  # Prevent Tk's default 1-unit movement
+                return "break"
 
             scale.bind("<Left>",  lambda e: _on_key(e, -1))
             scale.bind("<Down>",  lambda e: _on_key(e, -1))
@@ -735,6 +769,7 @@ class PipelineComparisonGUI:
             return
         success = self.engine.load_image(img_path)
         if success:
+            assert self.engine.orig_bgr is not None
             self.lbl_status.config(
                 text=f"Loaded image: {Path(img_path).name} ({self.engine.orig_bgr.shape[1]}x{self.engine.orig_bgr.shape[0]})"
             )
@@ -772,19 +807,38 @@ class PipelineComparisonGUI:
                 use_depth=self.use_depth_var.get(),
                 non_roi_fill=self.non_roi_fill_var.get(),
                 colormap=self.colormap_var.get(),
+                conf_thresh=self.conf_var.get(),
+                iou_thresh=self.iou_var.get(),
+                ioa_thresh=self.ioa_var.get(),
+                depth_thresh=self.depth_thresh_var.get(),
+                refine_boxes=self.refine_boxes_var.get(),
             )
-            # Signal completion via queue (root.after from threads is unreliable in Tk 9.0).
             self._msg_queue.put("inference_done")
         except Exception as e:
             logger.exception("Inference error")
             self._msg_queue.put(f"inference_error:{e}")
 
     def _on_inference_complete(self):
-        # Apply matplotlib colormap here in the main thread (thread-safe).
         self.engine.apply_depth_colormap()
         self.btn_run.config(state=tk.NORMAL, text="▶  RUN FULL INFERENCE")
         self.lbl_status.config(text="Inference complete. Adjust sliders to fine-tune results.")
-        self._reapply_filtering()
+
+        if self.engine.pipeline_result is not None:
+            self.detections = self.engine.pipeline_result.detections
+            kept_people = [d for d in self.detections if d.kept]
+            suppressed_dups = [d for d in self.detections if not d.kept]
+            people_count = self.engine.pipeline_result.people_count
+
+            self.lbl_count.config(text=f"People Count: {people_count}")
+            self.lbl_stats.config(
+                text=f"Initial Candidate Detections: {len(self.detections)}\n"
+                f"Filtered Duplicates: {len(suppressed_dups)}\n"
+                f"Active Person Boxes: {people_count}"
+            )
+            self._update_table()
+            self._update_display_image()
+        else:
+            self._reapply_filtering()
 
     def _on_inference_error(self, err: str):
         self.btn_run.config(state=tk.NORMAL, text="▶  RUN FULL INFERENCE")
@@ -836,7 +890,7 @@ class PipelineComparisonGUI:
                 tk.END,
                 values=(
                     f"#{d.box_id}",
-                    str(d.refined_bbox),
+                    str(d.bbox),
                     f"{d.confidence:.2f}",
                     f"{d.depth:.4f}",
                     status_text,
@@ -869,6 +923,7 @@ class PipelineComparisonGUI:
         self._render_canvas_image()
 
     def _render_annotated_image(self, show_suppressed: bool) -> np.ndarray:
+        assert self.engine.orig_bgr is not None
         annotated = self.engine.orig_bgr.copy()
         kept = [d for d in self.detections if d.kept]
         style = self.box_style_var.get()          # "box" | "dot" | "both"
@@ -876,10 +931,9 @@ class PipelineComparisonGUI:
         show_labels = self.show_labels_var.get()  # show #id / conf / depth labels
 
         for det in self.detections:
-            x1, y1, x2, y2 = det.refined_bbox
+            x1, y1, x2, y2 = det.bbox
             cx = (x1 + x2) // 2
             cy = (y1 + y2) // 2
-            # Base radius: 15% of the shorter box side; user scale then applied.
             dot_r = max(3, int(min(x2 - x1, y2 - y1) * 0.15 * dot_scale))
 
             if det.kept:
@@ -921,7 +975,6 @@ class PipelineComparisonGUI:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1, cv2.LINE_AA,
                     )
 
-
         count_badge = f"People Count: {len(kept)}"
         (cw, ch), _ = cv2.getTextSize(count_badge, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
         cv2.rectangle(annotated, (15, 15), (35 + cw, 30 + ch), (0, 0, 0), -1)
@@ -946,6 +999,7 @@ class PipelineComparisonGUI:
             cv2.putText(banner, title, (12, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
             return np.vstack([banner, r])
 
+        assert self.engine.orig_bgr is not None
         orig = self.engine.orig_bgr
         sem = self.engine.masked_bgr if self.engine.masked_bgr is not None else orig
         depth = self.engine.depth_colored_bgr if self.engine.depth_colored_bgr is not None else np.zeros_like(orig)
