@@ -1,5 +1,6 @@
-from . import depth_estimation, object_detection, semantic_segmentation
-from .pipeline import DetectorPipeline, PipelineDetection, PipelineResult
+from . import depth_estimation, object_detection, policy, semantic_segmentation
+from .models import PipelineDetection, PipelineResult
+from .pipeline import DetectorPipeline
 
 __all__ = [
     "DetectorPipeline",
@@ -7,5 +8,6 @@ __all__ = [
     "PipelineResult",
     "depth_estimation",
     "object_detection",
+    "policy",
     "semantic_segmentation",
 ]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from functools import partial
 from pathlib import Path
 
 import torch
@@ -12,6 +13,12 @@ from fastapi import APIRouter, FastAPI
 from student_detection.pipeline import DetectorPipeline
 from student_detection.pipeline.depth_estimation import DepthAnythingV2
 from student_detection.pipeline.object_detection import YOLOPerson
+from student_detection.pipeline.policy import (
+    FixedConfidencePolicy,
+    FixedDepthThresholdPolicy,
+    FixedIoAThresholdPolicy,
+    FixedIoUThresholdPolicy,
+)
 from student_detection.pipeline.semantic_segmentation import YOLOSemanticPerson
 
 from .detector_pipeline import DetectorPipelineWorker
@@ -54,7 +61,14 @@ async def lifespan(app: FastAPI):
         dep_model=dep_model,
     )
 
-    worker = DetectorPipelineWorker(predict_fn=pipeline.predict)
+    predict_fn = partial(
+        pipeline.predict,
+        conf_policy=FixedConfidencePolicy(0.25),
+        iou_policy=FixedIoUThresholdPolicy(0.25),
+        ioa_policy=FixedIoAThresholdPolicy(0.35),
+        depth_policy=FixedDepthThresholdPolicy(0.010),
+    )
+    worker = DetectorPipelineWorker(predict_fn=predict_fn)
     worker.start()
     app.state.detector_pipeline_worker = worker
     logger.info("DetectorPipelineWorker started and ready.")

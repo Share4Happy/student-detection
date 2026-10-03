@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
+
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from student_detection.common import NumpyImage
+
 from ...dependencies import get_detector_pipeline_worker
 from ...detector_pipeline import DetectorPipelineWorker, Item
 from .schemas import DetectionItem, PredictResponse
@@ -16,8 +19,26 @@ router = APIRouter(prefix="/predict")
 @router.post(path="", response_model=PredictResponse)
 async def predict(
     image: UploadFile,
-    worker: DetectorPipelineWorker = Depends(get_detector_pipeline_worker),
+    worker: Annotated[DetectorPipelineWorker, Depends(get_detector_pipeline_worker)],
 ) -> PredictResponse:
+    """Handle image upload and return depth-aware person detections.
+
+    Args:
+        `image`: Uploaded multipart image file (`image/jpeg`, `image/png`, or `image/webp`).
+        `worker`: Injected `DetectorPipelineWorker` dependency from application state.
+
+    Returns:
+        Populated `PredictResponse` containing count and detailed box detections.
+
+    Raises:
+        `HTTPException`: If file content type is unsupported (HTTP 400).
+        `HTTPException`: If uploaded file is empty or decoding fails (HTTP 400).
+        `HTTPException`: If worker inference fails or encounters an internal error (HTTP 500).
+
+    Examples:
+        >>> # response = client.post("/predict", files={"image": ("test.jpg", b"...", "image/jpeg")})
+        ... pass
+    """
     if image.content_type not in ["image/jpeg", "image/png", "image/jpg", "image/webp"]:
         raise HTTPException(
             status_code=400,

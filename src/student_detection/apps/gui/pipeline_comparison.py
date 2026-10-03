@@ -14,6 +14,7 @@ Allows testing different pipeline configurations:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -46,6 +47,12 @@ from student_detection.pipeline import (
 )
 from student_detection.pipeline.depth_estimation import DepthAnythingV2
 from student_detection.pipeline.object_detection import YOLOPerson
+from student_detection.pipeline.policy import (
+    FixedConfidencePolicy,
+    FixedDepthThresholdPolicy,
+    FixedIoAThresholdPolicy,
+    FixedIoUThresholdPolicy,
+)
 from student_detection.pipeline.semantic_segmentation import YOLOSemanticPerson
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
@@ -170,10 +177,10 @@ class PipelineEngine:
         if use_sem_roi and use_depth and non_roi_fill in ("black", "white"):
             self.pipeline_result = self.pipeline.predict(
                 image=input_img,
-                conf_threshold=conf_thresh,
-                iou_thresh=iou_thresh,
-                ioa_thresh=ioa_thresh,
-                depth_thresh=depth_thresh,
+                conf_policy=FixedConfidencePolicy(conf_thresh),
+                iou_policy=FixedIoUThresholdPolicy(iou_thresh),
+                ioa_policy=FixedIoAThresholdPolicy(ioa_thresh),
+                depth_policy=FixedDepthThresholdPolicy(depth_thresh),
                 refine_boxes=refine_boxes,
                 non_roi_fill=fill_val,
                 imgsz=imgsz,
@@ -386,10 +393,8 @@ class PipelineComparisonGUI:
 
         # Style configuration
         self.style = ttk.Style()
-        try:
+        with contextlib.suppress(Exception):
             self.style.theme_use("clam")
-        except Exception:
-            pass
 
         self.engine = PipelineEngine()
         self.detections: list[PipelineDetection] = []
@@ -412,14 +417,12 @@ class PipelineComparisonGUI:
 
     def _start_queue_poll(self):
         """Poll the message queue every 100 ms from the main thread."""
-        try:
+        with contextlib.suppress(Exception):
             msg = self._msg_queue.get_nowait()
             if msg == "inference_done":
                 self._on_inference_complete()
             elif msg.startswith("inference_error:"):
                 self._on_inference_error(msg[len("inference_error:"):])
-        except Exception:
-            pass  # queue.Empty or any other transient error
         self.root.after(100, self._start_queue_poll)
 
     def _create_layout(self):
@@ -825,7 +828,6 @@ class PipelineComparisonGUI:
 
         if self.engine.pipeline_result is not None:
             self.detections = self.engine.pipeline_result.detections
-            kept_people = [d for d in self.detections if d.kept]
             suppressed_dups = [d for d in self.detections if not d.kept]
             people_count = self.engine.pipeline_result.people_count
 
@@ -1096,7 +1098,7 @@ class PipelineComparisonGUI:
 
 def main():
     root = tk.Tk()
-    app = PipelineComparisonGUI(root)
+    PipelineComparisonGUI(root)
     root.mainloop()
 
 
