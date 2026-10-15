@@ -1,0 +1,9 @@
+# Model weights (large binary checkpoints)
+models/
+output/
+*.pt
+*.pth
+
+# Python cache
+__pycache__/
+*.py[oc]

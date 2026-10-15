@@ -2,7 +2,7 @@
 Interactive GUI Application for People Counting Pipeline Comparison.
 
 Allows testing different pipeline configurations:
-- Enable / Disable Semantic ROI filter (YOLO Semantic).
+- Enable / Disable Semantic ROI filter (Empty Semantic).
 - Enable / Disable Depth Estimation & Depth-Aware NMS (Depth Anything V2).
 - Enable / Disable Bounding Box Refinement.
 - Adjust Detection Confidence, IoU, IoA, and Depth Difference thresholds via interactive sliders.
@@ -46,14 +46,14 @@ from student_detection.core import (
     PipelineResult,
 )
 from student_detection.core.depth_estimation import DepthAnythingV2
-from student_detection.core.object_detection import YOLOPerson
+from student_detection.core.object_detection import YOLOFineTunedSingleClass
 from student_detection.core.policy import (
     FixedConfidencePolicy,
     FixedDepthThresholdPolicy,
     FixedIoAThresholdPolicy,
     FixedIoUThresholdPolicy,
 )
-from student_detection.core.semantic_segmentation import YOLOSemanticPerson
+from student_detection.core.semantic_segmentation import EmptyYOLOSemanticPerson
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
 logger = logging.getLogger("PipelineComparisonGUI")
@@ -78,12 +78,10 @@ class PipelineEngine:
 
     def __init__(
         self,
-        sem_model_path: str = find_default_model("yolo26x-sem.pt"),
-        det_model_path: str = find_default_model("yolo26x.pt"),
+        det_model_path: str = find_default_model("yolo26m_finetuned_heads.pt"),
         depth_checkpoint: str = "depth-anything/Depth-Anything-V2-Small-hf",
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.sem_model_path = sem_model_path
         self.det_model_path = det_model_path
         self.depth_checkpoint = depth_checkpoint
 
@@ -117,10 +115,10 @@ class PipelineEngine:
 
     def ensure_pipeline(self):
         if self.pipeline is None:
-            logger.info(f"Loading semantic model: {self.sem_model_path}")
-            sem_model = YOLOSemanticPerson(model=self.sem_model_path, device=self.device)
+            logger.info("Initializing EmptyYOLOSemanticPerson...")
+            sem_model = EmptyYOLOSemanticPerson()
             logger.info(f"Loading detection model: {self.det_model_path}")
-            det_model = YOLOPerson(model=self.det_model_path, device=self.device)
+            det_model = YOLOFineTunedSingleClass(model=self.det_model_path, device=self.device)
             logger.info(f"Loading Depth Anything V2: {self.depth_checkpoint}")
             dep_model = DepthAnythingV2(model_path=self.depth_checkpoint, device=self.device)
 
@@ -160,7 +158,7 @@ class PipelineEngine:
         ioa_thresh: float = 0.35,
         depth_thresh: float = 0.010,
         refine_boxes: bool = True,
-        imgsz: int = 1280,
+        imgsz: int = 640,
     ) -> PipelineResult | None:
         """Runs inference via DetectorPipeline and populates caches."""
         if self.orig_bgr is None:
@@ -474,7 +472,7 @@ class PipelineComparisonGUI:
         self.use_sem_var = tk.BooleanVar(value=True)
         cb_sem = ttk.Checkbutton(
             mod_sec,
-            text="Enable Semantic ROI (yolo26x-sem)",
+            text="Enable Semantic ROI (EmptyYOLOSemanticPerson)",
             variable=self.use_sem_var,
             command=self._on_config_toggle,
         )

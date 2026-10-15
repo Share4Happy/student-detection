@@ -4,7 +4,6 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from functools import partial
-from pathlib import Path
 
 import torch
 import uvicorn
@@ -12,47 +11,35 @@ from fastapi import APIRouter, FastAPI
 
 from student_detection.core import DetectorPipeline
 from student_detection.core.depth_estimation import DepthAnythingV2
-from student_detection.core.object_detection import YOLOPerson
+from student_detection.core.object_detection import YOLOFineTunedSingleClass
 from student_detection.core.policy import (
     FixedConfidencePolicy,
     FixedDepthThresholdPolicy,
     FixedIoAThresholdPolicy,
     FixedIoUThresholdPolicy,
 )
-from student_detection.core.semantic_segmentation import YOLOSemanticPerson
+from student_detection.core.semantic_segmentation import EmptyYOLOSemanticPerson
 
+from .config import ModelConfig, PipelineConfig, ServerConfig
 from .routes import predict
 from .worker import DetectorPipelineWorker
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
 logger = logging.getLogger("StudentDetectionAPI")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-
-
-def find_default_model(model_name: str) -> str:
-    candidates = [
-        PROJECT_ROOT / "data" / "models" / model_name,
-        PROJECT_ROOT / "models" / model_name,
-        Path("data/models") / model_name,
-        Path("models") / model_name,
-    ]
-    for c in candidates:
-        if c.exists():
-            return str(c)
-    return str(PROJECT_ROOT / "data" / "models" / model_name)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    sem_model_path = os.getenv("SEM_MODEL_PATH", find_default_model("yolo26x-sem.pt"))
-    det_model_path = os.getenv("DET_MODEL_PATH", find_default_model("yolo26x.pt"))
-    depth_checkpoint = os.getenv("DEPTH_CHECKPOINT", "depth-anything/Depth-Anything-V2-Small-hf")
+    device = ServerConfig.DEVICE
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    det_model_path = os.getenv("DET_MODEL_PATH", ModelConfig.DET_MODEL_PATH)
+    depth_checkpoint = os.getenv("DEPTH_CHECKPOINT", ModelConfig.DEPTH_CHECKPOINT)
 
     logger.info("Initializing models on device: %s", device)
-    sem_model = YOLOSemanticPerson(model=sem_model_path, device=device)
-    det_model = YOLOPerson(model=det_model_path, device=device)
+    sem_model = EmptyYOLOSemanticPerson()
+    det_model = YOLOFineTunedSingleClass(model=det_model_path, device=device)
     dep_model = DepthAnythingV2(model_path=depth_checkpoint, device=device)
 
     pipeline = DetectorPipeline(
@@ -63,10 +50,12 @@ async def lifespan(app: FastAPI):
 
     predict_fn = partial(
         pipeline.predict,
-        conf_policy=FixedConfidencePolicy(0.25),
-        iou_policy=FixedIoUThresholdPolicy(0.25),
-        ioa_policy=FixedIoAThresholdPolicy(0.35),
-        depth_policy=FixedDepthThresholdPolicy(0.010),
+        conf_policy=FixedConfidencePolicy(PipelineConfig.CONF_THRESHOLD),
+        iou_policy=FixedIoUThresholdPolicy(PipelineConfig.IOU_THRESHOLD),
+        ioa_policy=FixedIoAThresholdPolicy(PipelineConfig.IOA_THRESHOLD),
+        depth_policy=FixedDepthThresholdPolicy(PipelineConfig.DEPTH_THRESHOLD),
+        refine_boxes=PipelineConfig.REFINE_BOXES,
+        imgsz=PipelineConfig.IMGSZ,
     )
     worker = DetectorPipelineWorker(predict_fn=predict_fn)
     worker.start()
@@ -95,8 +84,8 @@ app.include_router(api_router)
 def main():
     uvicorn.run(
         app=app,
-        host="0.0.0.0",
-        port=8080,
+        host=ServerConfig.HOST,
+        port=ServerConfig.PORT,
     )
 
 
