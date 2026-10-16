@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel
 
@@ -10,7 +10,7 @@ class ServerConfig(BaseModel):
 
     HOST: ClassVar[str] = "0.0.0.0"
     PORT: ClassVar[int] = 8080
-    DEVICE: ClassVar[str] = "auto"  # "auto", "cuda", or "cpu"
+    DEVICE: ClassVar[Literal["auto", "cuda", "cpu"]] = "auto"
 
 
 class ModelConfig(BaseModel):
