@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student & People Counting — Inspection Lab</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --bg-card: #1e293b;
+      --bg-card-sub: #182234;
+      --bg-input: #090d16;
+      --border-color: #334155;
+      --border-focus: #38bdf8;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --accent-green: #22c55e;
+      --accent-red: #ef4444;
+      --accent-yellow: #eab308;
+      --accent-blue: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: white;
+      font-size: 16px;
+    }
+
+    .brand-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-left: 6px;
+    }
+
+    .header-links {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--accent-green);
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .status-pill.busy {
+      background: rgba(234, 179, 8, 0.15);
+      color: var(--accent-yellow);
+      border-color: rgba(234, 179, 8, 0.3);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .api-link {
+      color: var(--accent-blue);
+      text-decoration: none;
+      font-size: 0.85rem;
+      border: 1px solid var(--border-color);
+      padding: 5px 12px;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .api-link:hover {
+      background: rgba(56, 189, 248, 0.1);
+      border-color: var(--accent-blue);
+    }
+
+    /* Main Workspace Layout */
+    .app-container {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      flex: 1;
+      height: calc(100vh - 57px);
+      overflow: hidden;
+    }
+
+    @media (max-width: 1024px) {
+      .app-container {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: auto;
+      }
+    }
+
+    /* Left Control Sidebar */
+    .control-sidebar {
+      background: var(--bg-card);
+      border-right: 1px solid var(--border-color);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--bg-card-sub);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .card-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* File Drop Area */
+    .drop-zone {
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: var(--bg-input);
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent-blue);
+      background: rgba(56, 189, 248, 0.05);
+    }
+
+    .drop-icon {
+      font-size: 24px;
+      margin-bottom: 6px;
+      color: var(--text-muted);
+    }
+
+    .drop-text {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .drop-subtext {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    .btn-sample {
+      margin-top: 10px;
+      width: 100%;
+      padding: 7px 12px;
+      font-size: 0.8rem;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-sample:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--text-muted);
+    }
+
+    /* Sliders and Controls */
+    .control-row {
+      margin-bottom: 12px;
+    }
+
+    .control-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .val-badge {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: var(--accent-blue);
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-input);
+      border-radius: 3px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      cursor: pointer;
+      box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+    }
+
+    /* Radio Group */
+    .radio-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      background: var(--bg-input);
+      padding: 4px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .radio-label {
+      text-align: center;
+      font-size: 0.8rem;
+      padding: 6px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .radio-group input[type="radio"] {
+      display: none;
+    }
+
+    .radio-group input[type="radio"]:checked + .radio-label {
+      background: var(--primary);
+      color: white;
+      font-weight: 600;
+    }
+
+    /* Toggle Switch */
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      margin-top: 8px;
+      user-select: none;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      accent-color: var(--primary);
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+
+    /* Action Buttons */
+    .btn-run {
+      width: 100%;
+      padding: 12px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: white;
+      background: linear-gradient(135deg, var(--primary), #0369a1);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    }
+
+    .btn-run:hover:not(:disabled) {
+      background: linear-gradient(135deg, #0284c7, #075985);
+      transform: translateY(-1px);
+    }
+
+    .btn-run:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    /* Results Summary Card */
+    .summary-counter {
+      text-align: center;
+      padding: 12px 0 6px 0;
+    }
+
+    .counter-value {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--accent-green);
+      line-height: 1;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+
+    .counter-sub {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .stat-item {
+      background: var(--bg-input);
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-bottom: 2px;
+    }
+
+    .stat-val {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .stat-val.kept {
+      color: var(--accent-green);
+    }
+
+    .stat-val.suppressed {
+      color: var(--accent-red);
+    }
+
+    /* Server Config Card */
+    .info-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.8rem;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+    }
+
+    .info-row span:last-child {
+      color: var(--text-main);
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+
+    /* Right Visual Content Area */
+    .content-area {
+      display: flex;
+      flex-direction: column;
+      background: #090d16;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .tabs-header {
+      display: flex;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0 16px;
+    }
+
+    .tab-button {
+      padding: 12px 18px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tab-button:hover {
+      color: var(--text-main);
+    }
+
+    .tab-button.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+      background: rgba(56, 189, 248, 0.05);
+    }
+
+    .tab-content {
+      display: none;
+      flex: 1;
+      height: calc(100% - 45px);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Canvas Viewport */
+    .canvas-viewport {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      background: #0b0f19;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      display: inline-block;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    #image-canvas {
+      display: block;
+      cursor: crosshair;
+      max-width: 100%;
+      max-height: calc(100vh - 150px);
+      object-fit: contain;
+    }
+
+    .canvas-toolbar {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      font-size: 0.8rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .tooltip {
+      position: absolute;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      pointer-events: none;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      white-space: nowrap;
+      display: none;
+    }
+
+    /* Table View */
+    .table-container {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .table-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .search-input {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: 6px;
+      color: var(--text-main);
+      font-size: 0.85rem;
+      outline: none;
+      width: 260px;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    .data-table th {
+      background: var(--bg-card);
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .data-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 0.8rem;
+    }
+
+    .data-table tr:hover {
+      background: rgba(56, 189, 248, 0.05);
+      cursor: pointer;
+    }
+
+    .data-table tr.selected {
+      background: rgba(56, 189, 248, 0.15);
+      border-left: 3px solid var(--accent-blue);
+    }
+
+    .badge-kept {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--accent-green);
+    }
+
+    .badge-suppressed {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--accent-red);
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      gap: 12px;
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      opacity: 0.4;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">🎓</div>
+      <div>
+        <span class="brand-title">Student Detection &amp; Counting</span>
+        <span class="brand-subtitle">Interactive Inspection Lab</span>
+      </div>
+    </div>
+    <div class="header-links">
+      <div id="status-pill" class="status-pill">
+        <span class="status-dot"></span>
+        <span id="status-text">Server Ready</span>
+      </div>
+      <a href="/docs" target="_blank" class="api-link">API Docs (Swagger) ↗</a>
+    </div>
+  </header>
+
+  <!-- App Main Layout -->
+  <main class="app-container">
+    <!-- Left Sidebar: Controls -->
+    <aside class="control-sidebar">
+      <!-- 1. Input Image -->
+      <section class="card">
+        <div class="card-title">1. Input Image</div>
+        <div id="drop-zone" class="drop-zone">
+          <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" style="display: none;">
+          <div class="drop-icon">📷</div>
+          <div class="drop-text">Click or drag &amp; drop image here</div>
+          <div class="drop-subtext">Supports PNG, JPEG, WebP</div>
+        </div>
+        <button id="btn-sample" class="btn-sample">
+          <span>🖼️</span> Load Classroom Sample Image
+        </button>
+        <div id="file-info" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; display: none;"></div>
+      </section>
+
+      <!-- 2. Display & Box Representation -->
+      <section class="card">
+        <div class="card-title">2. Visualization Style</div>
+        
+        <div class="control-row">
+          <div class="control-header">
+            <span>Box Style</span>
+          </div>
+          <div class="radio-group">
+            <input type="radio" name="box-style" id="style-box" value="box" checked>
+            <label for="style-box" class="radio-label">Box</label>
+
+            <input type="radio" name="box-style" id="style-dot" value="dot">
+            <label for="style-dot" class="radio-label">Dot</label>
+
+            <input type="radio" name="box-style" id="style-both" value="both">
+            <label for="style-both" class="radio-label">Box + Dot</label>
+          </div>
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Dot Size Scale</span>
+            <span id="dot-size-val" class="val-badge">1.0×</span>
+          </div>
+          <input type="range" id="dot-size-slider" min="0.3" max="4.0" step="0.1" value="1.0">
+        </div>
+
+        <label class="checkbox-label">
+          <input type="checkbox" id="show-labels-check" checked>
+          <span>Show Labels (#ID, Conf, Depth)</span>
+        </label>
+
+        <label class="checkbox-label">
+          <input type="checkbox" id="show-suppressed-check" checked>
+          <span>Show Suppressed Duplicates (Red)</span>
+        </label>
+      </section>
+
+      <!-- 3. Dynamic Confidence Filter -->
+      <section class="card">
+        <div class="card-title">3. Dynamic Filtering</div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>Confidence Threshold</span>
+            <span id="conf-val" class="val-badge">0.25</span>
+          </div>
+          <input type="range" id="conf-slider" min="0.05" max="0.95" step="0.05" value="0.25">
+        </div>
+      </section>
+
+      <!-- 4. Run Action -->
+      <button id="btn-run" class="btn-run">
+        <span>▶</span> RUN INFERENCE
+      </button>
+
+      <!-- 5. Results Summary Card -->
+      <section class="card">
+        <div class="card-title">4. Results Summary</div>
+        <div class="summary-counter">
+          <div id="lbl-count" class="counter-value">--</div>
+          <div class="counter-sub">People Count (Kept)</div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="stat-label">Kept Detections</div>
+            <div id="lbl-kept" class="stat-val kept">--</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Suppressed Dups</div>
+            <div id="lbl-suppressed" class="stat-val suppressed">--</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Total Candidates</div>
+            <div id="lbl-total" class="stat-val">--</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Inference Time</div>
+            <div id="lbl-latency" class="stat-val" style="color: var(--accent-blue);">--</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Active Server Config -->
+      <section class="card">
+        <div class="card-title">Server Configuration</div>
+        <div class="info-list" id="server-config-list">
+          <div class="info-row"><span>Device:</span><span id="cfg-device">loading...</span></div>
+          <div class="info-row"><span>Detection Model:</span><span id="cfg-det">loading...</span></div>
+          <div class="info-row"><span>Depth Model:</span><span id="cfg-depth">loading...</span></div>
+          <div class="info-row"><span>IoU / IoA Thresh:</span><span id="cfg-iou-ioa">loading...</span></div>
+          <div class="info-row"><span>Depth Thresh:</span><span id="cfg-depth-thresh">loading...</span></div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Right Main Area: Visual Canvas & Table -->
+    <section class="content-area">
+      <!-- Tabs Bar -->
+      <div class="tabs-header">
+        <button class="tab-button active" data-tab="tab-canvas">
+          <span>🖼️</span> Interactive Canvas
+        </button>
+        <button class="tab-button" data-tab="tab-table">
+          <span>📋</span> Detections Table &amp; Logs
+        </button>
+      </div>
+
+      <!-- Tab 1: Interactive Canvas -->
+      <div id="tab-canvas" class="tab-content active">
+        <div class="canvas-viewport" id="viewport">
+          <div class="canvas-wrapper" id="canvas-wrapper">
+            <canvas id="image-canvas"></canvas>
+            <div id="tooltip" class="tooltip"></div>
+          </div>
+          <div class="canvas-toolbar">
+            <div class="legend-item">
+              <span class="legend-dot" style="background: var(--accent-green);"></span>
+              <span>Kept Person</span>
+            </div>
+            <div class="legend-item" style="margin-left: 10px;">
+              <span class="legend-dot" style="background: var(--accent-red);"></span>
+              <span>Suppressed Duplicate</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Detections Table -->
+      <div id="tab-table" class="tab-content">
+        <div class="table-container">
+          <div class="table-actions">
+            <input type="text" id="table-search" class="search-input" placeholder="Search by ID, Status, Reason...">
+            <button id="btn-export-json" class="btn-sample" style="width: auto; margin-top: 0;">
+              <span>💾</span> Export JSON
+            </button>
+          </div>
+          <div style="flex: 1; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">ID</th>
+                  <th style="width: 160px;">Bounding Box [x1, y1, x2, y2]</th>
+                  <th style="width: 80px;">Conf</th>
+                  <th style="width: 80px;">Depth</th>
+                  <th style="width: 80px;">Depth Std</th>
+                  <th style="width: 100px;">Status</th>
+                  <th>Suppression Reason / Notes</th>
+                </tr>
+              </thead>
+              <tbody id="table-body">
+                <tr>
+                  <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+                    No detections available. Run inference to view table entries.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // State management
+    const state = {
+      imageFile: null,
+      loadedImage: null,
+      detections: [],
+      rawResponse: null,
+      hoveredBoxId: null,
+      selectedBoxId: null,
+      isInferring: false,
+    };
+
+    // DOM Elements
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const fileInfo = document.getElementById('file-info');
+    const btnSample = document.getElementById('btn-sample');
+    const btnRun = document.getElementById('btn-run');
+    const btnExportJson = document.getElementById('btn-export-json');
+    const statusPill = document.getElementById('status-pill');
+    const statusText = document.getElementById('status-text');
+
+    const dotSizeSlider = document.getElementById('dot-size-slider');
+    const dotSizeVal = document.getElementById('dot-size-val');
+    const confSlider = document.getElementById('conf-slider');
+    const confVal = document.getElementById('conf-val');
+    const showLabelsCheck = document.getElementById('show-labels-check');
+    const showSuppressedCheck = document.getElementById('show-suppressed-check');
+
+    const lblCount = document.getElementById('lbl-count');
+    const lblKept = document.getElementById('lbl-kept');
+    const lblSuppressed = document.getElementById('lbl-suppressed');
+    const lblTotal = document.getElementById('lbl-total');
+    const lblLatency = document.getElementById('lbl-latency');
+
+    const canvas = document.getElementById('image-canvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('tooltip');
+    const tableBody = document.getElementById('table-body');
+    const tableSearch = document.getElementById('table-search');
+
+    // Tab Switching
+    document.querySelectorAll('.tab-button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+        if (btn.dataset.tab === 'tab-canvas') renderCanvas();
+      });
+    });
+
+    // Fetch Server Configuration Info
+    async function loadServerInfo() {
+      try {
+        const res = await fetch('/api/info');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('cfg-device').textContent = data.server.device;
+          document.getElementById('cfg-det').textContent = data.model.det_model_path.split('/').pop();
+          document.getElementById('cfg-depth').textContent = data.model.depth_checkpoint.split('/').pop();
+          document.getElementById('cfg-iou-ioa').textContent = `${data.pipeline.iou_threshold} / ${data.pipeline.ioa_threshold}`;
+          document.getElementById('cfg-depth-thresh').textContent = `${data.pipeline.depth_threshold}`;
+        }
+      } catch (err) {
+        console.warn('Failed to load server info:', err);
+      }
+    }
+    loadServerInfo();
+
+    // Image Upload & Drop Handling
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleFileSelection(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleFileSelection(e.target.files[0]);
+      }
+    });
+
+    // Sample Image Button
+    btnSample.addEventListener('click', async () => {
+      setServerStatus('Loading sample image...', true);
+      try {
+        const res = await fetch('/api/sample-image');
+        if (!res.ok) throw new Error('Sample image not found on server.');
+        const blob = await res.blob();
+        const file = new File([blob], 'classroom.png', { type: blob.type || 'image/png' });
+        handleFileSelection(file);
+        setServerStatus('Sample image loaded', false);
+      } catch (err) {
+        alert('Could not load sample image: ' + err.message);
+        setServerStatus('Ready', false);
+      }
+    });
+
+    function handleFileSelection(file) {
+      state.imageFile = file;
+      fileInfo.style.display = 'block';
+      fileInfo.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          state.loadedImage = img;
+          state.detections = [];
+          state.rawResponse = null;
+          updateResultsSummary();
+          updateTable();
+          renderCanvas();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Sliders & Toggles event listeners
+    dotSizeSlider.addEventListener('input', (e) => {
+      dotSizeVal.textContent = `${parseFloat(e.target.value).toFixed(1)}×`;
+      renderCanvas();
+    });
+
+    confSlider.addEventListener('input', (e) => {
+      confVal.textContent = parseFloat(e.target.value).toFixed(2);
+      updateResultsSummary();
+      updateTable();
+      renderCanvas();
+    });
+
+    showLabelsCheck.addEventListener('change', renderCanvas);
+    showSuppressedCheck.addEventListener('change', () => {
+      updateTable();
+      renderCanvas();
+    });
+
+    document.querySelectorAll('input[name="box-style"]').forEach(r => {
+      r.addEventListener('change', renderCanvas);
+    });
+
+    function getSelectedBoxStyle() {
+      const checked = document.querySelector('input[name="box-style"]:checked');
+      return checked ? checked.value : 'box';
+    }
+
+    function setServerStatus(text, isBusy = false) {
+      statusText.textContent = text;
+      if (isBusy) {
+        statusPill.classList.add('busy');
+      } else {
+        statusPill.classList.remove('busy');
+      }
+    }
+
+    // Run Full Inference via API
+    btnRun.addEventListener('click', async () => {
+      if (!state.imageFile) {
+        alert('Please select or drop an image first.');
+        return;
+      }
+
+      state.isInferring = true;
+      btnRun.disabled = true;
+      btnRun.textContent = '⏳ RUNNING INFERENCE...';
+      setServerStatus('Inference in progress...', true);
+
+      const formData = new FormData();
+      formData.append('image', state.imageFile);
+
+      const startTime = performance.now();
+      try {
+        const res = await fetch('/api/predict', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const elapsedMs = Math.round(performance.now() - startTime);
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        state.rawResponse = data;
+        state.detections = data.detections || [];
+
+        lblLatency.textContent = `${elapsedMs} ms`;
+        setServerStatus('Inference completed', false);
+        updateResultsSummary();
+        updateTable();
+        renderCanvas();
+      } catch (err) {
+        console.error('Inference error:', err);
+        alert(`Prediction failed: ${err.message}`);
+        setServerStatus('Inference error', false);
+      } finally {
+        state.isInferring = false;
+        btnRun.disabled = false;
+        btnRun.innerHTML = '<span>▶</span> RUN INFERENCE';
+      }
+    });
+
+    // Filtering active detections
+    function getFilteredDetections() {
+      const confCutoff = parseFloat(confSlider.value);
+      const showSuppressed = showSuppressedCheck.checked;
+
+      return state.detections.filter(d => {
+        if (d.confidence < confCutoff) return false;
+        if (!showSuppressed && !d.kept) return false;
+        return true;
+      });
+    }
+
+    function updateResultsSummary() {
+      const confCutoff = parseFloat(confSlider.value);
+      const valid = state.detections.filter(d => d.confidence >= confCutoff);
+      const kept = valid.filter(d => d.kept);
+      const suppressed = valid.filter(d => !d.kept);
+
+      if (state.detections.length === 0) {
+        lblCount.textContent = '--';
+        lblKept.textContent = '--';
+        lblSuppressed.textContent = '--';
+        lblTotal.textContent = '--';
+        return;
+      }
+
+      lblCount.textContent = kept.length;
+      lblKept.textContent = kept.length;
+      lblSuppressed.textContent = suppressed.length;
+      lblTotal.textContent = valid.length;
+    }
+
+    // Canvas Rendering
+    function renderCanvas() {
+      if (!state.loadedImage) {
+        canvas.width = 640;
+        canvas.height = 400;
+        ctx.fillStyle = '#0b0f19';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#64748b';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Select or load an image to begin', canvas.width / 2, canvas.height / 2);
+        return;
+      }
+
+      const img = state.loadedImage;
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+
+      // Draw base image
+      ctx.drawImage(img, 0, 0);
+
+      const items = getFilteredDetections();
+      const boxStyle = getSelectedBoxStyle();
+      const dotScale = parseFloat(dotSizeSlider.value);
+      const showLabels = showLabelsCheck.checked;
+
+      items.forEach(d => {
+        const [x1, y1, x2, y2] = d.bbox;
+        const w = x2 - x1;
+        const h = y2 - y1;
+        const cx = x1 + w / 2;
+        const cy = y1 + h / 2;
+        const isHovered = (state.hoveredBoxId === d.box_id);
+        const isSelected = (state.selectedBoxId === d.box_id);
+
+        const color = d.kept ? '#22c55e' : '#ef4444';
+        const strokeWidth = (isHovered || isSelected) ? 4 : 2;
+
+        // 1. Draw Bounding Box
+        if (boxStyle === 'box' || boxStyle === 'both') {
+          ctx.lineWidth = strokeWidth;
+          ctx.strokeStyle = color;
+          ctx.fillStyle = d.kept ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+          ctx.beginPath();
+          ctx.rect(x1, y1, w, h);
+          ctx.fill();
+          ctx.stroke();
+        }
+
+        // 2. Draw Dot
+        if (boxStyle === 'dot' || boxStyle === 'both') {
+          const baseRadius = Math.max(4, Math.min(w, h) * 0.1);
+          const radius = baseRadius * dotScale;
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.lineWidth = strokeWidth;
+          ctx.strokeStyle = '#ffffff';
+          ctx.stroke();
+        }
+
+        // 3. Draw Text Label
+        if (showLabels || isHovered || isSelected) {
+          const labelText = `#${d.box_id} ${(d.confidence * 100).toFixed(0)}% d:${d.depth.toFixed(3)}`;
+          ctx.font = 'bold 12px sans-serif';
+          const textMetrics = ctx.measureText(labelText);
+          const bgW = textMetrics.width + 8;
+          const bgH = 18;
+          const labelY = Math.max(bgH, y1);
+
+          ctx.fillStyle = color;
+          ctx.fillRect(x1, labelY - bgH, bgW, bgH);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(labelText, x1 + 4, labelY - 4);
+        }
+      });
+    }
+
+    // Canvas Mouse Interaction for Tooltip & Highlight
+    canvas.addEventListener('mousemove', (e) => {
+      if (!state.loadedImage || state.detections.length === 0) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const mouseX = (e.clientX - rect.left) * scaleX;
+      const mouseY = (e.clientY - rect.top) * scaleY;
+
+      const items = getFilteredDetections();
+      let found = null;
+
+      // Reverse search so topmost boxes match first
+      for (let i = items.length - 1; i >= 0; i--) {
+        const d = items[i];
+        const [x1, y1, x2, y2] = d.bbox;
+        if (mouseX >= x1 && mouseX <= x2 && mouseY >= y1 && mouseY <= y2) {
+          found = d;
+          break;
+        }
+      }
+
+      if (found) {
+        state.hoveredBoxId = found.box_id;
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${e.clientX - canvas.parentElement.getBoundingClientRect().left + 15}px`;
+        tooltip.style.top = `${e.clientY - canvas.parentElement.getBoundingClientRect().top + 15}px`;
+        tooltip.innerHTML = `
+          <strong>ID #${found.box_id}</strong> &nbsp;
+          <span style="color: ${found.kept ? 'var(--accent-green)' : 'var(--accent-red)'}">
+            ${found.kept ? 'KEPT' : 'SUPPRESSED'}
+          </span><br>
+          Conf: ${(found.confidence * 100).toFixed(1)}% | Depth: ${found.depth.toFixed(4)} (±${found.depth_std.toFixed(4)})<br>
+          BBox: [${found.bbox.join(', ')}]<br>
+          ${found.suppression_reason ? `<span style="color: var(--accent-red); font-size: 0.7rem;">Reason: ${found.suppression_reason}</span>` : ''}
+        `;
+        renderCanvas();
+        highlightTableRow(found.box_id);
+      } else {
+        if (state.hoveredBoxId !== null) {
+          state.hoveredBoxId = null;
+          tooltip.style.display = 'none';
+          renderCanvas();
+          highlightTableRow(null);
+        }
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      state.hoveredBoxId = null;
+      tooltip.style.display = 'none';
+      renderCanvas();
+      highlightTableRow(null);
+    });
+
+    canvas.addEventListener('click', (e) => {
+      if (!state.loadedImage || state.detections.length === 0) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const mouseX = (e.clientX - rect.left) * scaleX;
+      const mouseY = (e.clientY - rect.top) * scaleY;
+
+      const items = getFilteredDetections();
+      let clicked = null;
+      for (let i = items.length - 1; i >= 0; i--) {
+        const d = items[i];
+        const [x1, y1, x2, y2] = d.bbox;
+        if (mouseX >= x1 && mouseX <= x2 && mouseY >= y1 && mouseY <= y2) {
+          clicked = d;
+          break;
+        }
+      }
+
+      if (clicked) {
+        state.selectedBoxId = (state.selectedBoxId === clicked.box_id) ? null : clicked.box_id;
+        renderCanvas();
+        highlightTableRow(state.selectedBoxId, true);
+      }
+    });
+
+    // Table Rendering & Search
+    function updateTable() {
+      const items = getFilteredDetections();
+      const query = tableSearch.value.trim().toLowerCase();
+
+      const filtered = items.filter(d => {
+        if (!query) return true;
+        const text = `${d.box_id} ${d.kept ? 'kept' : 'suppressed'} ${d.suppression_reason || ''}`.toLowerCase();
+        return text.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              ${state.detections.length === 0 ? 'No detections available. Run inference first.' : 'No items match current filters.'}
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = filtered.map(d => `
+        <tr id="row-det-${d.box_id}" class="${state.selectedBoxId === d.box_id ? 'selected' : ''}" data-id="${d.box_id}">
+          <td><strong>#${d.box_id}</strong></td>
+          <td>[${d.bbox.join(', ')}]</td>
+          <td>${(d.confidence * 100).toFixed(1)}%</td>
+          <td>${d.depth.toFixed(4)}</td>
+          <td>${d.depth_std.toFixed(4)}</td>
+          <td>
+            <span class="${d.kept ? 'badge-kept' : 'badge-suppressed'}">
+              ${d.kept ? 'KEPT' : 'SUPPRESSED'}
+            </span>
+          </td>
+          <td style="color: ${d.kept ? 'var(--text-muted)' : 'var(--accent-red)'}">
+            ${d.suppression_reason || '—'}
+          </td>
+        </tr>
+      `).join('');
+
+      // Add click & hover to rows
+      tableBody.querySelectorAll('tr[data-id]').forEach(row => {
+        const boxId = parseInt(row.dataset.id, 10);
+        row.addEventListener('mouseenter', () => {
+          state.hoveredBoxId = boxId;
+          renderCanvas();
+        });
+        row.addEventListener('mouseleave', () => {
+          state.hoveredBoxId = null;
+          renderCanvas();
+        });
+        row.addEventListener('click', () => {
+          state.selectedBoxId = (state.selectedBoxId === boxId) ? null : boxId;
+          updateTableSelection();
+          renderCanvas();
+        });
+      });
+    }
+
+    tableSearch.addEventListener('input', updateTable);
+
+    function highlightTableRow(boxId, scrollIntoView = false) {
+      tableBody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+      if (boxId !== null) {
+        const target = document.getElementById(`row-det-${boxId}`);
+        if (target) {
+          target.classList.add('selected');
+          if (scrollIntoView) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+      }
+    }
+
+    function updateTableSelection() {
+      highlightTableRow(state.selectedBoxId, true);
+    }
+
+    // Export JSON
+    btnExportJson.addEventListener('click', () => {
+      if (!state.rawResponse) {
+        alert('No inference results to export.');
+        return;
+      }
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.rawResponse, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `student_detection_${state.rawResponse.id || Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    });
+
+    // Initialize blank canvas
+    renderCanvas();
+  </script>
+</body>
+</html>

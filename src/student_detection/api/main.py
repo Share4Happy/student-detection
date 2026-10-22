@@ -4,10 +4,12 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from functools import partial
+from pathlib import Path
 
 import torch
 import uvicorn
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse
 
 from student_detection.core import DetectorPipeline
 from student_detection.core.depth_estimation import DepthAnythingV2
@@ -75,10 +77,57 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SAMPLE_IMAGE_PATH = PROJECT_ROOT / "data" / "samples" / "classroom.png"
+
 api_router = APIRouter(prefix="/api")
 api_router.include_router(predict.api_router)
 
+
+@api_router.get("/info")
+async def get_server_info():
+    """Return active server, model, and pipeline configurations."""
+    return {
+        "server": {
+            "host": ServerConfig.HOST,
+            "port": ServerConfig.PORT,
+            "device": ServerConfig.DEVICE,
+        },
+        "model": {
+            "det_model_path": ModelConfig.DET_MODEL_PATH,
+            "depth_checkpoint": ModelConfig.DEPTH_CHECKPOINT,
+        },
+        "pipeline": {
+            "conf_threshold": PipelineConfig.CONF_THRESHOLD,
+            "iou_threshold": PipelineConfig.IOU_THRESHOLD,
+            "ioa_threshold": PipelineConfig.IOA_THRESHOLD,
+            "depth_threshold": PipelineConfig.DEPTH_THRESHOLD,
+            "refine_boxes": PipelineConfig.REFINE_BOXES,
+            "imgsz": PipelineConfig.IMGSZ,
+        },
+    }
+
+
+@api_router.get("/sample-image")
+async def get_sample_image():
+    """Return bundled sample image for quick UI testing."""
+    if not SAMPLE_IMAGE_PATH.exists():
+        raise HTTPException(status_code=404, detail="Sample image not found on server.")
+    return FileResponse(SAMPLE_IMAGE_PATH, media_type="image/png")
+
+
 app.include_router(api_router)
+
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/ui", response_class=HTMLResponse)
+async def serve_ui():
+    """Serve the frontend test inspection lab UI."""
+    index_file = STATIC_DIR / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="Frontend UI template not found.")
+    return FileResponse(index_file, media_type="text/html")
 
 
 def main():
