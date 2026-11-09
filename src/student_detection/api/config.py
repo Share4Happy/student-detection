@@ -16,7 +16,7 @@ class ServerConfig(BaseModel):
 class ModelConfig(BaseModel):
     """Model checkpoints and weights."""
 
-    DET_MODEL_PATH: ClassVar[str] = "data/models/yolo26m_finetuned_heads.pt"
+    DET_MODEL_PATH: ClassVar[str] = "data/models/yolo26m_finedtuned_head_48k.pt"
     DEPTH_CHECKPOINT: ClassVar[str] = "depth-anything/Depth-Anything-V2-Small-hf"
 
 
